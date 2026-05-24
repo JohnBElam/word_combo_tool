@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Scrabble Collage Builder</title>
+    <title>Scrabble Name Collage Maker</title>
     <style>
       :root {
         --ink: #1f2933;
@@ -378,16 +378,16 @@
   <body>
     <div class="shell">
       <div class="hero">
-        <h1>Scrabble Collage Builder</h1>
-        <p>Create cleaner family-name collages with touch/connection preferences.</p>
+        <h1>Scrabble Name Collage Maker</h1>
+        <p>Arrange family names on Scrabble tiles. Pick who should share a letter, or who should link through someone in the middle.</p>
       </div>
 
       <div class="layout">
         <div class="panel controls">
           <div class="section">
             <div class="label-row">
-              <label for="words">Names / Words</label>
-              <span class="hint">one per line</span>
+              <label for="words">Names to include</label>
+              <span class="hint">one name per line</span>
             </div>
             <textarea id="words">Brandon
 Edward
@@ -400,42 +400,26 @@ Scott</textarea>
 
           <div class="section">
             <div class="label-row">
-              <label for="mustTouch">Must touch pairs</label>
-              <span class="hint">NameA,NameB</span>
+              <label for="mustTouch">Should touch (share a letter)</label>
+              <span class="hint">Name, Name</span>
             </div>
             <textarea id="mustTouch">Scott,Trisha</textarea>
           </div>
 
           <div class="section">
             <div class="label-row">
-              <label for="bridgePairs">Bridge names</label>
-              <span class="hint">NameA,NameB,BridgeName</span>
+              <label for="bridgePairs">Connect through another name</label>
+              <span class="hint">Name, Name, middle name</span>
             </div>
             <textarea id="bridgePairs">Brandon,Emily,Edward</textarea>
           </div>
 
-          <div class="section">
-            <div class="label-row">
-              <label for="seedInput">Starting seed</label>
-              <span class="hint">search begins here</span>
-            </div>
-            <input id="seedInput" value="20260524" />
-          </div>
-
-          <div class="section">
-            <div class="label-row">
-              <label for="seedSearchCount">Seeds to try</label>
-              <span class="hint">more = better mixes</span>
-            </div>
-            <input id="seedSearchCount" type="number" min="1" max="500" value="80" />
-          </div>
-
           <div class="actions">
-            <button id="searchBtn">Find Best Mix</button>
-            <button id="buildBtn" class="secondary" type="button">Quick try (this seed only)</button>
+            <button id="searchBtn">Find my best layout</button>
+            <button id="buildBtn" class="secondary" type="button">Quick preview</button>
             <div id="searchProgressWrap" class="progress-wrap" hidden>
               <div class="progress-label">
-                <span id="progressText">Searching seeds…</span>
+                <span id="progressText">Working on it…</span>
                 <span id="progressPercent">0%</span>
               </div>
               <div class="progress-track" aria-hidden="true">
@@ -443,17 +427,17 @@ Scott</textarea>
               </div>
             </div>
             <div id="searchStatus" class="status-banner info">
-              Click Find Best Mix to search seeds until must-touch and bridge rules connect.
+              Click Find my best layout to arrange your names with your touching and middle-name rules.
             </div>
             <div class="fine-print">
-              Strict validation is enabled: accidental letter fragments are rejected.
+              We only keep layouts where every letter belongs to a whole name — no stray bits left over.
             </div>
           </div>
         </div>
 
         <div class="panel preview">
-          <h2>Layout Preview</h2>
-          <div id="constraintStatus" class="status-banner info">Run a search to evaluate must-touch and bridge connections.</div>
+          <h2>Your collage</h2>
+          <div id="constraintStatus" class="status-banner info">Add your names and click Find my best layout to see how everything connects.</div>
           <div id="meta" class="meta"></div>
           <div class="board-wrap">
             <div id="board" class="board"></div>
@@ -463,6 +447,7 @@ Scott</textarea>
       </div>
     </div>
 
+    <script src="../src/cp-solver.js"></script>
     <script src="../src/scrabble-collage.js"></script>
     <script src="./main.js"></script>
   </body>
