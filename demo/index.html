@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scrabble Collage Builder</title>
+    <style>
+      :root {
+        --ink: #1f2933;
+        --ink-soft: #5f6c7b;
+        --bg-a: #f6efe5;
+        --bg-b: #efe4d5;
+        --panel: #ffffff;
+        --line: #e6dccc;
+        --accent: #8b5e34;
+        --accent-strong: #6f431e;
+        --ok: #1f9d55;
+        --warn: #d64545;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        font-family: "Inter", "Segoe UI", system-ui, sans-serif;
+        background: radial-gradient(circle at top right, var(--bg-b), var(--bg-a) 55%);
+        color: var(--ink);
+        min-height: 100vh;
+      }
+
+      .shell {
+        max-width: 1320px;
+        margin: 0 auto;
+        padding: 24px;
+      }
+
+      .hero {
+        margin-bottom: 16px;
+      }
+
+      .hero h1 {
+        margin: 0;
+        font-size: clamp(1.5rem, 2vw, 2rem);
+        letter-spacing: 0.2px;
+      }
+
+      .hero p {
+        margin: 6px 0 0;
+        color: var(--ink-soft);
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(320px, 430px) 1fr;
+        gap: 18px;
+      }
+
+      .panel {
+        background: var(--panel);
+        border-radius: 18px;
+        border: 1px solid rgba(0, 0, 0, 0.03);
+        box-shadow: 0 10px 30px rgba(47, 33, 18, 0.09);
+      }
+
+      .controls {
+        padding: 18px;
+      }
+
+      .section + .section {
+        margin-top: 14px;
+      }
+
+      .label-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+      }
+
+      label {
+        font-size: 0.95rem;
+        font-weight: 600;
+      }
+
+      .hint {
+        font-size: 0.75rem;
+        color: var(--ink-soft);
+      }
+
+      textarea,
+      input,
+      button {
+        width: 100%;
+        font: inherit;
+      }
+
+      textarea,
+      input {
+        margin-top: 7px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px 12px;
+        background: #fffdf9;
+        color: var(--ink);
+        transition: border-color 120ms ease, box-shadow 120ms ease;
+      }
+
+      textarea:focus,
+      input:focus {
+        outline: none;
+        border-color: rgba(139, 94, 52, 0.6);
+        box-shadow: 0 0 0 3px rgba(139, 94, 52, 0.12);
+      }
+
+      textarea {
+        min-height: 92px;
+        resize: vertical;
+      }
+
+      .actions {
+        margin-top: 16px;
+        display: grid;
+        gap: 8px;
+      }
+
+      button {
+        border: 0;
+        border-radius: 12px;
+        padding: 12px 14px;
+        color: #fff;
+        font-weight: 700;
+        letter-spacing: 0.2px;
+        cursor: pointer;
+        background: linear-gradient(180deg, var(--accent), var(--accent-strong));
+        box-shadow: 0 7px 16px rgba(111, 67, 30, 0.35);
+        transition: transform 120ms ease, box-shadow 120ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+      }
+
+      button:active {
+        transform: translateY(1px);
+        box-shadow: 0 3px 10px rgba(111, 67, 30, 0.3);
+      }
+
+      .fine-print {
+        font-size: 0.78rem;
+        color: var(--ink-soft);
+      }
+
+      .preview {
+        padding: 18px;
+        display: grid;
+        grid-template-rows: auto auto 1fr auto;
+        gap: 12px;
+      }
+
+      .preview h2 {
+        margin: 0;
+        font-size: 1.08rem;
+      }
+
+      .meta {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 8px;
+      }
+
+      .stat {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 8px 10px;
+        background: #fffdfa;
+      }
+
+      .stat .k {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--ink-soft);
+      }
+
+      .stat .v {
+        margin-top: 2px;
+        font-size: 1.05rem;
+        font-weight: 700;
+      }
+
+      .board-wrap {
+        overflow: auto;
+        border-radius: 14px;
+        border: 1px solid #9f815f;
+        background: linear-gradient(135deg, #bc9465, #a87f52);
+        padding: 12px;
+      }
+
+      .board {
+        display: grid;
+        gap: 3px;
+        width: max-content;
+      }
+
+      .cell {
+        width: 38px;
+        height: 38px;
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        border: 1px solid rgba(63, 41, 20, 0.2);
+      }
+
+      .cell.tile {
+        background: linear-gradient(180deg, #f5dfb2, #e8ca8e);
+        box-shadow: 0 2px 0 rgba(111, 67, 30, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+      }
+
+      .letter {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: #3e2b18;
+      }
+
+      .score {
+        position: absolute;
+        right: 4px;
+        bottom: 2px;
+        font-size: 0.58rem;
+        font-weight: 700;
+        color: #5f3f21;
+      }
+
+      .cell.empty {
+        border-color: transparent;
+        background: rgba(0, 0, 0, 0.07);
+      }
+
+      .connections h3 {
+        margin: 2px 0 8px;
+      }
+
+      .connection-list {
+        display: grid;
+        gap: 8px;
+      }
+
+      .connection-item {
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        padding: 10px;
+        background: #fffcf8;
+      }
+
+      .connection-title {
+        font-weight: 700;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        margin-left: 8px;
+        padding: 2px 7px;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        vertical-align: middle;
+      }
+
+      .chip.ok {
+        background: rgba(31, 157, 85, 0.12);
+        color: var(--ok);
+      }
+
+      .chip.warn {
+        background: rgba(214, 69, 69, 0.12);
+        color: var(--warn);
+      }
+
+      .row {
+        margin-top: 5px;
+        font-size: 0.86rem;
+        color: #364150;
+      }
+
+      .mono {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      @media (max-width: 980px) {
+        .shell {
+          padding: 14px;
+        }
+
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <div class="hero">
+        <h1>Scrabble Collage Builder</h1>
+        <p>Create cleaner family-name collages with touch/connection preferences.</p>
+      </div>
+
+      <div class="layout">
+        <div class="panel controls">
+          <div class="section">
+            <div class="label-row">
+              <label for="words">Names / Words</label>
+              <span class="hint">one per line</span>
+            </div>
+            <textarea id="words">Brandon
+Edward
+Emily
+Mason
+Preston
+Trisha
+Scott</textarea>
+          </div>
+
+          <div class="section">
+            <div class="label-row">
+              <label for="mustTouch">Must touch pairs</label>
+              <span class="hint">NameA,NameB</span>
+            </div>
+            <textarea id="mustTouch">Scott,Trisha</textarea>
+          </div>
+
+          <div class="section">
+            <div class="label-row">
+              <label for="bridgePairs">Bridge names</label>
+              <span class="hint">NameA,NameB,BridgeName</span>
+            </div>
+            <textarea id="bridgePairs">Brandon,Emily,Edward</textarea>
+          </div>
+
+          <div class="section">
+            <div class="label-row">
+              <label for="seedInput">Seed</label>
+              <span class="hint">same seed = same layout</span>
+            </div>
+            <input id="seedInput" value="20260524" />
+          </div>
+
+          <div class="actions">
+            <button id="buildBtn">Generate Collage</button>
+            <div class="fine-print">
+              Strict validation is enabled: accidental letter fragments are rejected.
+            </div>
+          </div>
+        </div>
+
+        <div class="panel preview">
+          <h2>Layout Preview</h2>
+          <div id="meta" class="meta"></div>
+          <div class="board-wrap">
+            <div id="board" class="board"></div>
+          </div>
+          <div class="connections" id="connections"></div>
+        </div>
+      </div>
+    </div>
+
+    <script src="../src/scrabble-collage.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
