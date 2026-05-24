@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scrabble Collage Builder</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial, sans-serif;
+        background: #f5f3ee;
+        color: #1f1f1f;
+      }
+
+      .layout {
+        display: grid;
+        grid-template-columns: minmax(280px, 420px) 1fr;
+        gap: 16px;
+        padding: 16px;
+      }
+
+      .panel {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 14px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+      }
+
+      textarea,
+      input,
+      button {
+        width: 100%;
+        box-sizing: border-box;
+        font: inherit;
+      }
+
+      textarea,
+      input {
+        border: 1px solid #d7d7d7;
+        border-radius: 8px;
+        padding: 8px 10px;
+        margin-top: 6px;
+      }
+
+      textarea {
+        min-height: 96px;
+        resize: vertical;
+      }
+
+      button {
+        margin-top: 12px;
+        border: none;
+        background: #3b5bdb;
+        color: #fff;
+        border-radius: 8px;
+        padding: 10px;
+        cursor: pointer;
+      }
+
+      button:hover {
+        background: #364fc7;
+      }
+
+      .board-wrap {
+        overflow: auto;
+        padding: 10px;
+      }
+
+      .board {
+        display: grid;
+        gap: 2px;
+        background: #bfa47a;
+        padding: 6px;
+        width: max-content;
+      }
+
+      .cell {
+        width: 32px;
+        height: 32px;
+        border-radius: 5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        border: 1px solid rgba(0, 0, 0, 0.14);
+      }
+
+      .cell.tile {
+        background: #e8d1a1;
+      }
+
+      .cell.empty {
+        background: transparent;
+        border-color: transparent;
+      }
+
+      .meta {
+        margin-top: 12px;
+        font-size: 14px;
+      }
+
+      .connections {
+        margin-top: 12px;
+        font-size: 14px;
+        line-height: 1.45;
+      }
+
+      .ok {
+        color: #2b8a3e;
+      }
+
+      .warn {
+        color: #c92a2a;
+      }
+
+      @media (max-width: 980px) {
+        .layout {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="layout">
+      <div class="panel">
+        <h2>Scrabble Collage Builder</h2>
+        <p>One name/word per line:</p>
+        <textarea id="words">Brandon
+Edward
+Emily
+Mason
+Preston
+Trisha
+Scott</textarea>
+
+        <p>Must touch (each line: NameA,NameB)</p>
+        <textarea id="mustTouch">Scott,Trisha</textarea>
+
+        <p>Prefer connected/near (line: NameA,NameB,type,viaWord1|viaWord2)</p>
+        <textarea id="softPairs">Brandon,Emily,preferConnected,Edward</textarea>
+
+        <p>Seed (optional; same seed = repeatable layout)</p>
+        <input id="seedInput" value="20260524" />
+
+        <button id="buildBtn">Generate Collage</button>
+
+        <div class="meta" id="meta"></div>
+      </div>
+
+      <div class="panel">
+        <h3>Layout Preview</h3>
+        <div class="board-wrap">
+          <div id="board" class="board"></div>
+        </div>
+        <div class="connections" id="connections"></div>
+      </div>
+    </div>
+
+    <script src="../src/scrabble-collage.js"></script>
+    <script src="./main.js"></script>
+  </body>
+</html>
