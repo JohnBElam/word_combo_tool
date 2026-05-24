@@ -7,7 +7,7 @@
   const buildBtn = document.getElementById("buildBtn");
   const wordsEl = document.getElementById("words");
   const mustTouchEl = document.getElementById("mustTouch");
-  const softPairsEl = document.getElementById("softPairs");
+  const bridgePairsEl = document.getElementById("bridgePairs");
   const seedEl = document.getElementById("seedInput");
 
   const SCORE_MAP = {
@@ -46,16 +46,38 @@
       .filter(Boolean);
   }
 
+  function parseBridgePairs() {
+    const bridges = [];
+    const lines = String(bridgePairsEl.value || "").split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) {
+        continue;
+      }
+
+      const [a, b, viaRaw] = trimmed.split(",").map((part) => part.trim());
+      if (!a || !b || !viaRaw) {
+        continue;
+      }
+
+      const via = viaRaw.split("|").map((part) => part.trim()).filter(Boolean);
+      if (via.length === 0) {
+        continue;
+      }
+
+      bridges.push({
+        a,
+        b,
+        type: "preferConnected",
+        via,
+      });
+    }
+    return bridges;
+  }
+
   function buildPreferences() {
     const mustTouch = window.ScrabbleCollage.parsePairLines(mustTouchEl.value, "mustTouch");
-    const soft = window.ScrabbleCollage.parsePairLines(softPairsEl.value, "preferConnected").map((pref) => {
-      const allowed = new Set(["preferConnected", "preferNear", "preferTouch", "mustTouch"]);
-      return {
-        ...pref,
-        type: allowed.has(pref.type) ? pref.type : "preferConnected",
-      };
-    });
-    return [...mustTouch, ...soft];
+    return [...mustTouch, ...parseBridgePairs()];
   }
 
   function tileScore(letter) {
@@ -127,6 +149,7 @@
       const hopText = Number.isFinite(report.hopDistance) ? String(report.hopDistance) : "unconnected";
       const pathText = report.stitchedPath ? report.stitchedPath.join(" -> ") : "(none)";
       const viaText = report.via && report.via.length ? report.via.join(" -> ") : "(none)";
+      const connectionMode = report.via && report.via.length ? "bridge" : report.type;
       const viaChip =
         report.via && report.via.length
           ? `<span class="chip ${report.viaSatisfied ? "ok" : "warn"}">${report.viaSatisfied ? "via satisfied" : "via missing"}</span>`
@@ -139,7 +162,7 @@
             <span class="chip ${report.directTouch ? "ok" : "warn"}">${report.directTouch ? "touching" : "not touching"}</span>
             ${viaChip}
           </div>
-          <div class="row">type: <span class="mono">${report.type}</span> | hops: <span class="mono">${hopText}</span> | distance: <span class="mono">${report.centerDistance}</span></div>
+          <div class="row">mode: <span class="mono">${connectionMode}</span> | hops: <span class="mono">${hopText}</span> | distance: <span class="mono">${report.centerDistance}</span></div>
           <div class="row">stitched path: <span class="mono">${pathText}</span></div>
           <div class="row">via request: <span class="mono">${viaText}</span></div>
         </div>

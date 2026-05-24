@@ -20,6 +20,7 @@ Builds "Scrabble collage" style layouts from names/words, with optional pair pre
 1. Serve the repo with any static server.
 2. Open `demo/index.html`.
 3. Enter words and preferences, then click **Generate Collage**.
+   - In the demo UI, "Bridge names" lines use `NameA,NameB,BridgeName` (example: `Brandon,Emily,Edward`).
 
 ## Integrate in a website
 
