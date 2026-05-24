@@ -15,12 +15,13 @@
   const wordsEl = document.getElementById("words");
   const mustTouchEl = document.getElementById("mustTouch");
   const bridgePairsEl = document.getElementById("bridgePairs");
-  const seedEl = document.getElementById("seedInput");
-  const seedSearchCountEl = document.getElementById("seedSearchCount");
 
   let searchGeneration = 0;
   const SEARCH_MAX_ATTEMPTS = 120;
+  const HEURISTIC_SEED_COUNT = 80;
   const STOP_AFTER_SATISFIED = 8;
+  const CP_FEASIBILITY_TIME_BUDGET = 1500;
+  const CP_OPTIMIZATION_TIME_BUDGET = 2500;
 
   const SCORE_MAP = {
     A: 1,
@@ -92,19 +93,6 @@
     return [...mustTouch, ...parseBridgePairs()];
   }
 
-  function readSeedStart() {
-    const parsed = Number(seedEl.value);
-    return Number.isFinite(parsed) ? parsed : Date.now();
-  }
-
-  function readSeedSearchCount() {
-    const parsed = Number(seedSearchCountEl.value);
-    if (!Number.isFinite(parsed)) {
-      return 80;
-    }
-    return Math.min(500, Math.max(1, Math.floor(parsed)));
-  }
-
   function tileScore(letter) {
     return SCORE_MAP[letter] || 1;
   }
@@ -115,11 +103,11 @@
     searchProgressWrapEl.hidden = !isBusy;
   }
 
-  function setSearchProgress(tried, total) {
-    const pct = total > 0 ? Math.min(100, Math.round((tried / total) * 100)) : 0;
-    progressBarEl.style.width = `${pct}%`;
-    progressPercentEl.textContent = `${pct}%`;
-    progressTextEl.textContent = `Searching seeds ${tried} of ${total}`;
+  function setSolveProgress(label, pct) {
+    const clamped = Math.max(0, Math.min(100, pct));
+    progressBarEl.style.width = `${clamped}%`;
+    progressPercentEl.textContent = `${Math.round(clamped)}%`;
+    progressTextEl.textContent = label;
   }
 
   function setSearchStatus(message, tone) {
@@ -127,35 +115,62 @@
     searchStatusEl.className = `status-banner ${tone || "info"}`;
   }
 
-  function renderConstraintStatus(result, searchMeta) {
+  function renderConstraintStatus(result) {
     const summary = result.metrics.constraints;
     const parts = [];
 
     if (summary.mustTouchTotal > 0) {
-      parts.push(`must-touch ${summary.mustTouchSatisfied}/${summary.mustTouchTotal}`);
+      parts.push(`touching pairs ${summary.mustTouchSatisfied}/${summary.mustTouchTotal}`);
     }
     if (summary.bridgeTotal > 0) {
-      parts.push(`bridges ${summary.bridgeSatisfied}/${summary.bridgeTotal}`);
+      parts.push(`middle-name links ${summary.bridgeSatisfied}/${summary.bridgeTotal}`);
+    }
+    if (result.metrics.components > 1) {
+      parts.push(`${result.metrics.components} separate groups`);
     }
 
-    const detail = parts.length ? parts.join(" · ") : "no connection rules configured";
-    const seedNote = searchMeta ? ` · best seed ${searchMeta.bestSeed} (${searchMeta.seedsTried} tried)` : "";
+    const detail = parts.length ? parts.join(" · ") : "no special connection rules";
+    const connectedNote =
+      summary.allConnected === false ? " · some names aren't on the same board yet" : "";
+    const solver = (result && result.solver) || null;
+    const solverNote = solver ? solverNoteFor(solver) : "";
 
     if (summary.allSatisfied) {
       constraintStatusEl.className = "status-banner ok";
-      constraintStatusEl.textContent = `All connection rules satisfied (${detail})${seedNote}.`;
+      constraintStatusEl.textContent = `Looks great — all your names connect the way you wanted (${detail})${solverNote}.`;
       return;
     }
 
     constraintStatusEl.className = "status-banner warn";
-    constraintStatusEl.textContent = `Best mix so far is incomplete (${detail})${seedNote}. Try more seeds or adjust words.`;
+    constraintStatusEl.textContent = `Almost there — not every rule is met yet (${detail})${connectedNote}${solverNote}. Try changing your name list or connection rules.`;
+  }
+
+  function solverNoteFor(solver) {
+    if (!solver) {
+      return "";
+    }
+    if (solver.engine === "cp") {
+      return solver.optimal
+        ? " · our best possible layout"
+        : " · a strong layout (we ran out of time to check for an even better one)";
+    }
+    if (solver.engine === "heuristic") {
+      if (solver.status === "cp-incomplete") {
+        return " · quick layout after the thorough search couldn't meet every rule";
+      }
+      if (solver.status === "cp-unavailable") {
+        return " · quick layout (thorough search wasn't available)";
+      }
+      return " · quick layout";
+    }
+    return "";
   }
 
   function renderBoard(board) {
     boardEl.innerHTML = "";
     const rows = board.rows || [];
     if (!rows.length) {
-      boardEl.textContent = "Add words, then click Find Best Mix.";
+      boardEl.textContent = "Add your names, then click Find my best layout.";
       return;
     }
 
@@ -177,7 +192,7 @@
 
           cell.appendChild(letter);
           cell.appendChild(score);
-          cell.title = `Letter ${ch} (${tileScore(ch)} points)`;
+          cell.title = `${ch} — ${tileScore(ch)} point${tileScore(ch) === 1 ? "" : "s"}`;
         }
         fragment.appendChild(cell);
       }
@@ -186,20 +201,13 @@
     boardEl.appendChild(fragment);
   }
 
-  function renderMeta(result, searchMeta) {
+  function renderMeta(result) {
     const stats = [
-      ["Score", result.metrics.score],
-      ["Intersections", result.metrics.overlapCount],
-      ["Components", result.metrics.components],
-      ["Words Placed", result.placements.length],
+      ["Total score", result.metrics.score],
+      ["Shared letters", result.metrics.overlapCount],
+      ["Groups", result.metrics.components],
+      ["Names placed", result.placements.length],
     ];
-
-    if (searchMeta) {
-      stats.push(["Best Seed", searchMeta.bestSeed]);
-      stats.push(["Seeds Tried", searchMeta.seedsTried]);
-    } else {
-      stats.push(["Seed", readSeedStart()]);
-    }
 
     metaEl.innerHTML = stats
       .map(
@@ -215,15 +223,13 @@
 
   function renderConnections(result) {
     if (!result.metrics.preferenceReports.length) {
-      connectionsEl.innerHTML = `<h3>Connection Report</h3><div class="row">No pair preferences were provided.</div>`;
+      connectionsEl.innerHTML = `<h3>Name connections</h3><div class="row">You didn't ask for any special touching rules.</div>`;
       return;
     }
 
     const blocks = result.metrics.preferenceReports.map((report) => {
-      const hopText = Number.isFinite(report.hopDistance) ? String(report.hopDistance) : "unconnected";
-      const pathText = report.stitchedPath ? report.stitchedPath.join(" -> ") : "(none)";
-      const viaText = report.via && report.via.length ? report.via.join(" -> ") : "(none)";
-      const connectionMode = report.via && report.via.length ? "bridge" : report.type;
+      const pathText = report.stitchedPath ? report.stitchedPath.join(" → ") : "not connected yet";
+      const viaText = report.via && report.via.length ? report.via.join(" → ") : "";
       const isMustTouch = report.type === "mustTouch";
       const ruleOk = isMustTouch
         ? report.directTouch
@@ -232,61 +238,67 @@
           : report.directTouch;
       const ruleLabel = isMustTouch
         ? report.directTouch
-          ? "must-touch ok"
-          : "must-touch missing"
+          ? "Touching"
+          : "Not touching yet"
         : report.via && report.via.length
           ? report.viaSatisfied
-            ? "bridge ok"
-            : "bridge missing"
+            ? "Connected through middle name"
+            : "Middle name link missing"
           : report.directTouch
-            ? "touching"
-            : "not touching";
+            ? "Touching"
+            : "Not touching yet";
       const viaChip =
         report.via && report.via.length
-          ? `<span class="chip ${report.viaSatisfied ? "ok" : "warn"}">${report.viaSatisfied ? "via satisfied" : "via missing"}</span>`
+          ? `<span class="chip ${report.viaSatisfied ? "ok" : "warn"}">${report.viaSatisfied ? "Middle name works" : "Middle name missing"}</span>`
           : "";
+
+      const viaRow =
+        viaText
+          ? `<div class="row">Through: <span class="mono">${viaText}</span></div>`
+          : "";
+      const pathRow =
+        pathText !== "not connected yet"
+          ? `<div class="row">How they link: <span class="mono">${pathText}</span></div>`
+          : `<div class="row">How they link: not connected yet</div>`;
 
       return `
         <div class="connection-item">
           <div class="connection-title">
-            ${report.a} x ${report.b}
+            ${report.a} &amp; ${report.b}
             <span class="chip ${ruleOk ? "ok" : "warn"}">${ruleLabel}</span>
             ${viaChip}
           </div>
-          <div class="row">mode: <span class="mono">${connectionMode}</span> | hops: <span class="mono">${hopText}</span> | distance: <span class="mono">${report.centerDistance}</span></div>
-          <div class="row">stitched path: <span class="mono">${pathText}</span></div>
-          <div class="row">via request: <span class="mono">${viaText}</span></div>
+          ${viaRow}
+          ${pathRow}
         </div>
       `;
     });
 
     connectionsEl.innerHTML = `
-      <h3>Connection Report</h3>
+      <h3>Name connections</h3>
       <div class="connection-list">${blocks.join("")}</div>
     `;
   }
 
-  function showResult(result, searchMeta) {
+  function showResult(result) {
     renderBoard(result.board);
-    renderMeta(result, searchMeta);
-    renderConstraintStatus(result, searchMeta);
+    renderMeta(result);
+    renderConstraintStatus(result);
     renderConnections(result);
-
-    if (searchMeta) {
-      seedEl.value = String(searchMeta.bestSeed);
-    }
   }
 
   function generateOnce() {
-    const seed = readSeedStart();
     const result = window.ScrabbleCollage.buildScrabbleCollage(readWords(), {
       preferences: buildPreferences(),
-      randomSeed: seed,
+      randomSeed: Date.now(),
       maxAttempts: 220,
       strictCrossChecks: true,
     });
-    showResult(result, null);
-    setSearchStatus(`Quick layout for seed ${seed}.`, result.metrics.constraints.allSatisfied ? "ok" : "warn");
+    showResult(result);
+    setSearchStatus(
+      "Here's a quick layout to peek at.",
+      result.metrics.constraints.allSatisfied ? "ok" : "warn"
+    );
   }
 
   function yieldToBrowser() {
@@ -303,106 +315,84 @@
 
     const words = readWords();
     const preferences = buildPreferences();
-    const seedStart = readSeedStart();
-    const seedCount = readSeedSearchCount();
 
     if (!words.length) {
-      setSearchStatus("Add at least one word before searching.", "warn");
+      setSearchStatus("Please add at least one name first.", "warn");
       return;
     }
 
     setBusy(true);
-    setSearchProgress(0, seedCount);
-    setSearchStatus(`Searching up to ${seedCount} seeds…`, "info");
-
-    let bestResult = null;
-    let bestRank = -Infinity;
-    let bestSeed = seedStart;
-    let seedsTried = 0;
-    let satisfiedStreak = 0;
-    let finished = false;
+    setSolveProgress("Checking if your rules can work…", 5);
+    setSearchStatus("Looking for the best arrangement…", "info");
 
     try {
-      for (let i = 0; i < seedCount; i += 1) {
-        if (generation !== searchGeneration) {
-          return;
-        }
+      // Yield once so the busy state and progress bar render before the
+      // CP solver starts blocking the JS thread.
+      await yieldToBrowser();
 
-        const seed = (seedStart + i) >>> 0;
-        const result = window.ScrabbleCollage.buildScrabbleCollage(words, {
-          preferences,
-          randomSeed: seed,
-          maxAttempts: SEARCH_MAX_ATTEMPTS,
-          strictCrossChecks: true,
-        });
-        seedsTried += 1;
-
-        const rankScore = window.ScrabbleCollage.layoutQualityRank(result.metrics);
-        if (!bestResult || rankScore > bestRank) {
-          bestResult = result;
-          bestRank = rankScore;
-          bestSeed = seed;
-        }
-
-        const constraints = result.metrics.constraints;
-        if (constraints.allSatisfied) {
-          satisfiedStreak += 1;
-          if (satisfiedStreak >= STOP_AFTER_SATISFIED) {
-            break;
-          }
-        } else {
-          satisfiedStreak = 0;
-        }
-
-        setSearchProgress(seedsTried, seedCount);
-
-        const interim = bestResult.metrics.constraints;
-        setSearchStatus(
-          `Tried ${seedsTried}/${seedCount} · must-touch ${interim.mustTouchSatisfied}/${interim.mustTouchTotal} · bridges ${interim.bridgeSatisfied}/${interim.bridgeTotal}`,
-          interim.allSatisfied ? "ok" : "info"
-        );
-
-        // Refresh preview every 4 seeds (and on the last seed) to keep UI responsive.
-        if (seedsTried % 4 === 0 || seedsTried === seedCount) {
-          showResult(bestResult, { bestSeed, seedsTried, seedCount });
-        }
-
-        await yieldToBrowser();
+      if (generation !== searchGeneration) {
+        return;
       }
 
-      finished = true;
-      setSearchProgress(seedCount, seedCount);
+      const result = window.ScrabbleCollage.solveBestCollage(words, {
+        preferences,
+        strictCrossChecks: true,
+        feasibilityTimeBudget: CP_FEASIBILITY_TIME_BUDGET,
+        optimizationTimeBudget: CP_OPTIMIZATION_TIME_BUDGET,
+        // Heuristic fallback config
+        randomSeed: Date.now(),
+        maxAttempts: SEARCH_MAX_ATTEMPTS,
+        seedCount: HEURISTIC_SEED_COUNT,
+        stopAfterSatisfied: STOP_AFTER_SATISFIED,
+        fallbackSearch: true,
+      });
 
-      const searchMeta = {
-        bestSeed,
-        seedsTried,
-        seedCount,
-        allSatisfied: bestResult.metrics.constraints.allSatisfied,
-      };
-
-      showResult(bestResult, searchMeta);
-
-      if (searchMeta.allSatisfied) {
-        setSearchStatus(`Done — full match after ${seedsTried} seeds (best seed ${bestSeed}).`, "ok");
-      } else {
-        setSearchStatus(
-          `Done — best mix after ${seedsTried} seeds (best seed ${bestSeed}). Try more seeds if needed.`,
-          "warn"
-        );
+      if (generation !== searchGeneration) {
+        return;
       }
+
+      setSolveProgress("All set!", 100);
+      showResult(result);
+      setSearchStatus(buildFinishedStatus(result), pickStatusTone(result));
     } catch (error) {
       console.error(error);
-      setSearchStatus(`Search failed: ${error.message}`, "warn");
+      setSearchStatus(`Something went wrong: ${error.message}`, "warn");
     } finally {
       if (generation === searchGeneration) {
         setBusy(false);
-        if (finished) {
-          setSearchProgress(seedsTried, seedCount);
-        } else {
-          searchProgressWrapEl.hidden = true;
-        }
       }
     }
+  }
+
+  function buildFinishedStatus(result) {
+    const solver = result && result.solver;
+    const constraints = result && result.metrics && result.metrics.constraints;
+    const allSatisfied = constraints && constraints.allSatisfied;
+
+    if (solver && solver.engine === "cp" && solver.optimal && allSatisfied) {
+      return "Found the best layout for your rules.";
+    }
+    if (solver && solver.engine === "cp" && allSatisfied) {
+      return "Found a layout that follows your rules. We stopped before checking every possibility.";
+    }
+    if (solver && solver.engine === "cp" && !allSatisfied) {
+      return "We couldn't fit every rule with these names. Try fewer rules or different names.";
+    }
+    if (solver && solver.engine === "heuristic" && allSatisfied) {
+      return "Found a layout that works — we used a quicker method after the thorough search needed more time.";
+    }
+    if (solver && solver.engine === "heuristic" && !allSatisfied) {
+      return "Here's the closest layout we could make. Try adjusting your names or rules.";
+    }
+    return "All set!";
+  }
+
+  function pickStatusTone(result) {
+    const constraints = result && result.metrics && result.metrics.constraints;
+    if (!constraints) {
+      return "info";
+    }
+    return constraints.allSatisfied ? "ok" : "warn";
   }
 
   buildBtn.addEventListener("click", generateOnce);
