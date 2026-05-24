@@ -119,7 +119,7 @@
 
   function renderConnections(result) {
     if (!result.metrics.preferenceReports.length) {
-      connectionsEl.innerHTML = "<h3>Connection Report</h3><div class="row">No pair preferences were provided.</div>";
+      connectionsEl.innerHTML = `<h3>Connection Report</h3><div class="row">No pair preferences were provided.</div>`;
       return;
     }
 
