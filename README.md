@@ -7,6 +7,7 @@ Builds "Scrabble collage" style layouts from names/words, with optional pair pre
 - `preferConnected`: allow a stitched path through other words.
 - `preferNear`: keep words physically close.
 - Optional `via`: enforce/encourage stitching through specific names (for example Brandon -> Edward -> Emily).
+- `strictCrossChecks` (default `true`): rejects accidental fragments (for example invalid mini-combos like `MB` or `IND`).
 
 ## Files
 
@@ -34,7 +35,8 @@ Builds "Scrabble collage" style layouts from names/words, with optional pair pre
   const result = window.ScrabbleCollage.buildScrabbleCollage(words, {
     preferences,
     randomSeed: 20260524,
-    maxAttempts: 180
+    maxAttempts: 180,
+    strictCrossChecks: true
   });
 
   console.log(result.placements);

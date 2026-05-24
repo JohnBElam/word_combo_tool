@@ -6,6 +6,7 @@
     maxAttempts: 140,
     randomSeed: Date.now(),
     randomTopChoices: 4,
+    strictCrossChecks: true,
   };
 
   function normalizeWord(word) {
@@ -174,9 +175,45 @@
     }
   }
 
-  function canPlaceWord(state, placement) {
+  function readBoardLetter(state, transientLetters, row, col) {
+    const key = `${row},${col}`;
+    if (transientLetters.has(key)) {
+      return transientLetters.get(key);
+    }
+    const existing = state.board.get(key);
+    return existing ? existing.letter : "";
+  }
+
+  function collectLineWord(state, transientLetters, row, col, rowStep, colStep) {
+    let startRow = row;
+    let startCol = col;
+
+    while (readBoardLetter(state, transientLetters, startRow - rowStep, startCol - colStep)) {
+      startRow -= rowStep;
+      startCol -= colStep;
+    }
+
+    const letters = [];
+    let currentRow = startRow;
+    let currentCol = startCol;
+    while (true) {
+      const letter = readBoardLetter(state, transientLetters, currentRow, currentCol);
+      if (!letter) {
+        break;
+      }
+      letters.push(letter);
+      currentRow += rowStep;
+      currentCol += colStep;
+    }
+
+    return letters.join("");
+  }
+
+  function canPlaceWord(state, placement, allowedWordSet, options) {
     let overlapCount = 0;
     const cells = getCellsForPlacement(placement);
+    const transientLetters = new Map();
+
     for (const cell of cells) {
       const key = `${cell.row},${cell.col}`;
       const existing = state.board.get(key);
@@ -185,6 +222,45 @@
       }
       if (existing && existing.letter === cell.letter) {
         overlapCount += 1;
+      } else {
+        transientLetters.set(key, cell.letter);
+      }
+    }
+
+    if (options.strictCrossChecks) {
+      const first = cells[0];
+      const last = cells[cells.length - 1];
+      if (placement.direction === "across") {
+        if (readBoardLetter(state, transientLetters, first.row, first.col - 1)) {
+          return { ok: false, overlapCount: 0 };
+        }
+        if (readBoardLetter(state, transientLetters, last.row, last.col + 1)) {
+          return { ok: false, overlapCount: 0 };
+        }
+      } else {
+        if (readBoardLetter(state, transientLetters, first.row - 1, first.col)) {
+          return { ok: false, overlapCount: 0 };
+        }
+        if (readBoardLetter(state, transientLetters, last.row + 1, last.col)) {
+          return { ok: false, overlapCount: 0 };
+        }
+      }
+
+      for (const cell of cells) {
+        const key = `${cell.row},${cell.col}`;
+        const existing = state.board.get(key);
+        if (existing) {
+          continue;
+        }
+
+        const crossWord =
+          placement.direction === "across"
+            ? collectLineWord(state, transientLetters, cell.row, cell.col, 1, 0)
+            : collectLineWord(state, transientLetters, cell.row, cell.col, 0, 1);
+
+        if (crossWord.length > 1 && !allowedWordSet.has(crossWord)) {
+          return { ok: false, overlapCount: 0 };
+        }
       }
     }
 
@@ -545,7 +621,7 @@
     return score;
   }
 
-  function choosePlacementForWord(word, state, relationIndex, rng, randomTopChoices) {
+  function choosePlacementForWord(word, state, relationIndex, rng, randomTopChoices, allowedWordSet, options) {
     let rawCandidates = [];
     rawCandidates = rawCandidates.concat(getCrossCandidates(word, state));
     rawCandidates = rawCandidates.concat(getNearCandidates(word, state, relationIndex));
@@ -563,7 +639,7 @@
         col: candidate.col,
         direction: candidate.direction,
       };
-      const check = canPlaceWord(state, placement);
+      const check = canPlaceWord(state, placement, allowedWordSet, options);
       if (!check.ok) {
         continue;
       }
@@ -581,9 +657,17 @@
       return emergency;
     }
 
-    scored.sort((a, b) => b.score - a.score);
-    const bucket = scored.slice(0, Math.max(1, randomTopChoices));
-    const chosen = bucket[Math.floor(rng() * bucket.length)] || scored[0];
+    let rankingPool = scored;
+    if (state.placements.length > 0) {
+      const overlapOnly = scored.filter((candidate) => candidate.overlapCount > 0);
+      if (overlapOnly.length > 0) {
+        rankingPool = overlapOnly;
+      }
+    }
+
+    rankingPool.sort((a, b) => b.score - a.score);
+    const bucket = rankingPool.slice(0, Math.max(1, randomTopChoices));
+    const chosen = bucket[Math.floor(rng() * bucket.length)] || rankingPool[0] || scored[0];
     chosen.placement._overlapCount = chosen.overlapCount;
     return chosen.placement;
   }
@@ -618,10 +702,11 @@
     const state = createState();
     const orderedWords = computeWordOrder(words, relationIndex, rng);
     const randomTopChoices = options.randomTopChoices;
+    const allowedWordSet = new Set(words);
 
     for (const word of orderedWords) {
-      const placement = choosePlacementForWord(word, state, relationIndex, rng, randomTopChoices);
-      const check = canPlaceWord(state, placement);
+      const placement = choosePlacementForWord(word, state, relationIndex, rng, randomTopChoices, allowedWordSet, options);
+      const check = canPlaceWord(state, placement, allowedWordSet, options);
       if (!check.ok) {
         continue;
       }
