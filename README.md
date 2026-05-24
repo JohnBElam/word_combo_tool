@@ -19,7 +19,8 @@ Builds "Scrabble collage" style layouts from names/words, with optional pair pre
 
 1. Serve the repo with any static server.
 2. Open `demo/index.html`.
-3. Enter words and preferences, then click **Generate Collage**.
+3. Enter words and preferences, then click **Find Best Mix** (searches many seeds for layouts that satisfy must-touch and bridge rules).
+   - **Quick try (this seed only)** runs a single seed for comparison.
    - In the demo UI, "Bridge names" lines use `NameA,NameB,BridgeName` (example: `Brandon,Emily,Edward`).
 
 ## Integrate in a website
@@ -64,6 +65,21 @@ const result = buildScrabbleCollage(
 console.log(result.metrics.preferenceReports);
 ```
 
+## Search for better mixes
+
+`searchBestCollage()` tries multiple seeds and keeps the layout that best satisfies must-touch and bridge (`via`) rules, then breaks ties by score:
+
+```js
+const result = searchBestCollage(words, {
+  preferences,
+  randomSeed: 20260524,
+  seedCount: 120,
+  maxAttempts: 240,
+});
+console.log(result.metrics.constraints);
+console.log(result.search.bestSeed);
+```
+
 ## Output shape
 
 `buildScrabbleCollage()` returns:
@@ -74,6 +90,7 @@ console.log(result.metrics.preferenceReports);
   - `score`
   - `overlapCount`
   - `components`
+  - `constraints` (`mustTouchSatisfied`, `bridgeSatisfied`, `allSatisfied`, …)
   - `preferenceReports[]` including:
     - `directTouch`
     - `hopDistance`

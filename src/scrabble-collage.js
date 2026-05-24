@@ -445,9 +445,11 @@
 
       if (pref.via && pref.via.length > 0) {
         if (viaSatisfied) {
-          delta += 85 * pref.weight;
+          delta += 180 * pref.weight;
+        } else if (Number.isFinite(hop) && hop <= pref.via.length + 2) {
+          delta -= 60 * pref.weight;
         } else {
-          delta -= 110 * pref.weight;
+          delta -= 220 * pref.weight;
         }
       }
 
@@ -617,6 +619,21 @@
       }
     }
 
+    const relations = relationIndex.byWord.get(word) || [];
+    for (const rel of relations) {
+      if (!rel.via || !rel.via.includes(word)) {
+        continue;
+      }
+      const anchorA = state.placementByWord.get(rel.a);
+      const anchorB = state.placementByWord.get(rel.b);
+      if (!anchorA || !anchorB) {
+        continue;
+      }
+      const distA = centerDistance(center, getPlacementCenter(anchorA));
+      const distB = centerDistance(center, getPlacementCenter(anchorB));
+      score -= (distA + distB) * 2.8 * rel.weight;
+    }
+
     score -= (Math.abs(center.row) + Math.abs(center.col)) * 0.08;
     return score;
   }
@@ -734,6 +751,36 @@
     return out;
   }
 
+  function summarizeConstraints(preferenceReports) {
+    const reports = preferenceReports || [];
+    const mustTouch = reports.filter((report) => report.type === "mustTouch");
+    const bridges = reports.filter((report) => report.via && report.via.length > 0);
+
+    const mustTouchSatisfied = mustTouch.filter((report) => report.directTouch).length;
+    const bridgeSatisfied = bridges.filter((report) => report.viaSatisfied).length;
+
+    const allMustTouch = mustTouch.length === 0 || mustTouchSatisfied === mustTouch.length;
+    const allBridges = bridges.length === 0 || bridgeSatisfied === bridges.length;
+
+    return {
+      mustTouchTotal: mustTouch.length,
+      mustTouchSatisfied,
+      bridgeTotal: bridges.length,
+      bridgeSatisfied,
+      allMustTouch,
+      allBridges,
+      allSatisfied: allMustTouch && allBridges,
+    };
+  }
+
+  function layoutQualityRank(metrics) {
+    const summary = summarizeConstraints(metrics.preferenceReports);
+    const satisfiedPairs = summary.mustTouchSatisfied + summary.bridgeSatisfied;
+    const requiredPairs = summary.mustTouchTotal + summary.bridgeTotal;
+    // Prefer full constraint satisfaction, then more satisfied pairs, then score.
+    return satisfiedPairs * 1_000_000 + (summary.allSatisfied ? 500_000 : 0) + metrics.score;
+  }
+
   function buildScrabbleCollage(rawWords, rawOptions) {
     const options = { ...DEFAULT_OPTIONS, ...(rawOptions || {}) };
     const words = sanitizeWords(rawWords);
@@ -746,6 +793,7 @@
           overlapCount: 0,
           components: 0,
           preferenceReports: [],
+          constraints: summarizeConstraints([]),
         },
       };
     }
@@ -755,10 +803,13 @@
     const relationIndex = buildRelationIndex(words, preferences);
 
     let best = null;
+    let bestRank = -Infinity;
     for (let i = 0; i < options.maxAttempts; i += 1) {
       const attempt = runSingleAttempt(words, relationIndex, options, i + 1);
-      if (!best || attempt.metrics.score > best.metrics.score) {
+      const rank = layoutQualityRank(attempt.metrics);
+      if (!best || rank > bestRank) {
         best = attempt;
+        bestRank = rank;
       }
     }
 
@@ -771,6 +822,8 @@
 
     placements.sort((a, b) => a.word.localeCompare(b.word));
 
+    const constraints = summarizeConstraints(best.metrics.preferenceReports);
+
     return {
       placements,
       board: buildBoard(best.state),
@@ -779,6 +832,60 @@
         overlapCount: best.metrics.overlapCount,
         components: best.metrics.components,
         preferenceReports: best.metrics.preferenceReports,
+        constraints,
+      },
+    };
+  }
+
+  function searchBestCollage(rawWords, rawOptions) {
+    const options = { ...DEFAULT_OPTIONS, ...(rawOptions || {}) };
+    const seedCount = Math.max(1, Number(options.seedCount) || 80);
+    const seedStart = Number(options.randomSeed) || Date.now();
+    const stopWhenSatisfied = options.stopWhenSatisfied !== false;
+    const stopAfterSatisfied = Math.max(0, Number(options.stopAfterSatisfied) || 12);
+
+    let bestResult = null;
+    let bestRank = -Infinity;
+    let bestSeed = seedStart;
+    let seedsTried = 0;
+    let satisfiedStreak = 0;
+
+    for (let i = 0; i < seedCount; i += 1) {
+      const seed = (seedStart + i) >>> 0;
+      const result = buildScrabbleCollage(rawWords, {
+        ...options,
+        randomSeed: seed,
+      });
+      seedsTried += 1;
+
+      const rank = layoutQualityRank({
+        score: result.metrics.score,
+        preferenceReports: result.metrics.preferenceReports,
+      });
+
+      if (!bestResult || rank > bestRank) {
+        bestResult = result;
+        bestRank = rank;
+        bestSeed = seed;
+      }
+
+      if (result.metrics.constraints.allSatisfied) {
+        satisfiedStreak += 1;
+        if (stopWhenSatisfied && satisfiedStreak >= stopAfterSatisfied) {
+          break;
+        }
+      } else {
+        satisfiedStreak = 0;
+      }
+    }
+
+    return {
+      ...bestResult,
+      search: {
+        seedsTried,
+        seedCount,
+        bestSeed,
+        allSatisfied: Boolean(bestResult && bestResult.metrics.constraints.allSatisfied),
       },
     };
   }
@@ -807,6 +914,9 @@
 
   const publicApi = {
     buildScrabbleCollage,
+    searchBestCollage,
+    summarizeConstraints,
+    layoutQualityRank,
     parsePairLines,
   };
 
